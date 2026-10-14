@@ -46,7 +46,7 @@ onUnmounted(() => {
           <circle cx="16" cy="16" r="1.9" fill="currentColor" />
         </svg>
         <span class="wordmark">
-          <b>DEEP AGENT SEARCH</b>
+          <b>深度搜索</b>
           <small>深度医药市场调研智能体</small>
         </span>
       </div>

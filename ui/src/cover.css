@@ -132,9 +132,12 @@
   min-width: 0;
 }
 .cover .wordmark b {
-  font-size: 11.5px;
+  /* 标题为中文「深度搜索」。原来 11.5px / 0.19em 是为大写拉丁字母调的
+     （拉丁字面小、需要重字距撑开），换成四个汉字后字号偏小、字距偏散，
+     故改为 13px / 0.14em。 */
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.19em;
+  letter-spacing: 0.14em;
   color: #fff;
   white-space: nowrap;
 }
