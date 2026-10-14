@@ -17,8 +17,24 @@
   /* 卡片提亮后（背景改为亮调雪山），原来的 .76 / .58 透明度已过不了 AA，
      实测后上调：次要文字 7.5:1、辅助文字 4.9:1 以上 */
   --on-glass-2: rgba(255, 255, 255, 0.88);
-  --on-glass-3: rgba(255, 255, 255, 0.80);
+  /* 辅助文字档：0.80 时在 1024/390 档实测仅 4.46~4.48:1（摄影底 90 分位采样的
+     正常波动就会掉到 AA 线下），提到 0.85 留出安全余量。 */
+  --on-glass-3: rgba(255, 255, 255, 0.85);
   --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---------- 与站内页面（style.css 的 --c-* 静蓝工作台）配色的映射 ----------
+     封面是深色摄影底，站内是浅色底，**不能直接照搬色值**——同一个 token 在深底上
+     必须提亮才够对比度。所以规则是：色相与语义与 --c-* 一一对应，只重算明度。
+     右侧注释写明它对应哪个站内 token，供后续审查（改色只改这里）。 */
+  --cv-brand: #5563ff; /* = --c-brand           品牌/交互（白环 focus、输入聚焦态） */
+  --cv-brand-lt: #8b93ff; /* ← --c-brand 深底提亮档（品牌色在深底上的可读档） */
+  --cv-violet: #a78bfa; /* ← --c-violet #8b5cf6  深底提亮档 */
+  --cv-cyan: #22d3ee; /* ← --c-cyan   #0891b2  进行中/演示态 深底提亮档 */
+  --cv-grass: #34d399; /* ← --c-grass  #0f9d58  完成/在线/规则满足 深底提亮档 */
+  --cv-amber: #fbbf24; /* ← --c-amber  #b45309  耗时/中等强度 深底提亮档 */
+  --cv-rose: #f87171; /* ← --c-rose   #dc2626  错误 深底提亮档 */
+  --cv-ink-2: #5e6680; /* = --c-text-3  浅底胶囊内的图标/占位（白底 4.9:1 过 AA） */
+  --cv-ink-3: #1b2137; /* = --c-text    浅底胶囊内 hover 图标 */
 
   position: relative;
   height: 100%;
@@ -146,7 +162,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--cv-grass);
   box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
 }
 .cover .mono {
@@ -200,7 +216,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, #7dd3fc, #a5b4fc, transparent);
+  background: linear-gradient(90deg, transparent, var(--cv-cyan), var(--cv-violet), transparent);
   animation: cover-sweep 1.15s linear infinite;
 }
 @keyframes cover-sweep {
@@ -295,7 +311,7 @@
   background: #fff;
   border-color: rgba(255, 255, 255, 0.9);
   box-shadow:
-    0 0 0 2px #5563ff,
+    0 0 0 2px var(--cv-brand),
     0 0 0 7px rgba(85, 99, 255, 0.28);
 }
 .cover .pi {
@@ -303,11 +319,11 @@
   height: 19px;
   margin-left: 17px;
   flex: 0 0 auto;
-  color: #6b7280;
+  color: var(--cv-ink-2);
   transition: color 0.2s;
 }
 .cover .pill:focus-within .pi {
-  color: #5563ff;
+  color: var(--cv-brand);
 }
 .cover .pill input {
   flex: 1;
@@ -318,10 +334,10 @@
   outline: none;
   background: transparent;
   font-size: 13.5px;
-  color: #0f1424;
+  color: var(--c-ink);
 }
 .cover .pill input::placeholder {
-  color: #6b7280; /* 白底 4.83:1，过 AA */
+  color: var(--cv-ink-2); /* 白底 4.9:1，过 AA */
 }
 .cover .eye {
   width: 34px;
@@ -331,11 +347,11 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #6b7280;
+  color: var(--cv-ink-2);
   transition: color 0.18s, background 0.18s;
 }
 .cover .eye svg { width: 17px; height: 17px; }
-.cover .eye:hover { color: #1b2137; background: rgba(15, 20, 36, 0.07); }
+.cover .eye:hover { color: var(--cv-ink-3); background: rgba(15, 20, 36, 0.07); }
 
 .cover .strength {
   display: flex;
@@ -390,7 +406,7 @@
 .cover .remember .box svg {
   width: 11px;
   height: 11px;
-  color: #0b0f1c;
+  color: var(--c-ink);
   opacity: 0;
   transform: scale(0.7);
   transition: opacity 0.18s, transform 0.18s var(--ease-expo);
@@ -404,7 +420,7 @@
   transform: scale(1);
 }
 .cover .remember input:focus-visible + .box {
-  box-shadow: 0 0 0 2px #5563ff, 0 0 0 6px rgba(85, 99, 255, 0.3);
+  box-shadow: 0 0 0 2px var(--cv-brand), 0 0 0 6px rgba(85, 99, 255, 0.3);
 }
 
 .cover .err {
@@ -419,7 +435,7 @@
   font-size: 12.5px;
   font-weight: 500;
 }
-.cover .err svg { width: 17px; height: 17px; flex: 0 0 auto; color: #f87171; }
+.cover .err svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--cv-rose); }
 .cover .err-enter-from,
 .cover .err-leave-to { opacity: 0; transform: translateY(-5px); }
 .cover .err-enter-active,

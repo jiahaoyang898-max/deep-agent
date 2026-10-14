@@ -47,7 +47,10 @@ const pwdStrength = computed(() => {
 })
 const strengthLabel = computed(() => ['太短啦', '较弱', '一般', '良好', '很强'][pwdStrength.value])
 const strengthColor = computed(
-  () => ['rgba(255,255,255,.28)', '#f87171', '#fbbf24', '#60a5fa', '#34d399'][pwdStrength.value],
+  () =>
+    ['rgba(255,255,255,.28)', 'var(--cv-rose)', 'var(--cv-amber)', 'var(--cv-brand-lt)', 'var(--cv-grass)'][
+      pwdStrength.value
+    ],
 )
 
 /* ---------- 密码规则实时勾选清单 ---------- */
@@ -253,7 +256,7 @@ async function submit() {
   margin-right: 14px;
   flex: 0 0 auto;
   border-radius: 50%;
-  color: #0f9d58;
+  color: var(--cv-grass);
 }
 .okmark svg { width: 14px; height: 14px; }
 
@@ -284,8 +287,8 @@ async function submit() {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #7dd3fc;
-  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18);
+  background: var(--cv-cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
 }
 .brief-count {
   font-size: 11px;
@@ -317,7 +320,7 @@ async function submit() {
   border-radius: 5px;
   border: 1.5px solid rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.06);
-  color: #0b0f1c;
+  color: var(--c-ink);
   transition: background 0.2s var(--ease-expo), border-color 0.2s;
 }
 .r-box svg {
@@ -328,8 +331,8 @@ async function submit() {
   transition: opacity 0.18s, transform 0.18s var(--ease-expo);
 }
 .rules li.ok .r-box {
-  background: #34d399;
-  border-color: #34d399;
+  background: var(--cv-grass);
+  border-color: var(--cv-grass);
 }
 .rules li.ok .r-box svg {
   opacity: 1;

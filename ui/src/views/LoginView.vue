@@ -240,8 +240,8 @@ async function submit() {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #7dd3fc;
-  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18);
+  background: var(--cv-cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
 }
 .fill {
   padding: 6px 13px;
