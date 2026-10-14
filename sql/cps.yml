@@ -7,10 +7,10 @@ services:
     container_name: mydb
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: itwwy123456
+      MYSQL_ROOT_PASSWORD: change-me-strong-password
       MYSQL_DATABASE: mydb
-      MYSQL_USER: itwwy
-      MYSQL_PASSWORD: itwwy123
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: change-me-too
     ports:
       - "3306:3306"
     volumes:

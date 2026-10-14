@@ -1,0 +1,31 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+*.egg-info/
+
+# ---- Node / 前端 ----
+node_modules/
+ui/dist/
+
+# ---- 运行时数据（容器通过 bind mount 写入，不入库）----
+docker-data/
+output/
+upload/
+
+# ---- 构建产物 / 归档 ----
+ui.zip
+
+# 日志与临时文件
+*.log
+*.tmp
+
+# ---- 敏感配置：绝不入库 ----
+# .env / docker/.env.docker 含真实 API Key 与数据库密码，一律不跟踪。
+# 首次使用请复制模板：cp .env.example .env
+#                    cp docker/.env.docker.example docker/.env.docker
+# 一键启动脚本会在缺失时自动从模板生成。
+.env
+.env.local
+docker/.env.docker

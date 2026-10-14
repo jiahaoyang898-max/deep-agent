@@ -1,0 +1,13 @@
+.venv/
+.git/
+.idea/
+**/__pycache__/
+*.pyc
+**/node_modules/
+ui/dist/
+ui.zip
+output/
+upload/
+docker-data/
+text/
+.env
