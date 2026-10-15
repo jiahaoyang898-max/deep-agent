@@ -15,7 +15,11 @@ RUN pip install --no-cache-dir --timeout 120 --retries 6 \
     pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple "weasyprint>=61"
 
 # WeasyPrint 渲染 PDF 需要的 pango / 中文字体
-RUN apt-get update && \
+# 注：容器内默认走 deb.debian.org 直连，本机 Docker 引擎若未配代理会被墙（502）。
+# 这里改用清华镜像源，与上面的 pip 源一致——即使 Docker 引擎没配代理也能装。
+RUN (sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true) && \
+    (sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true) && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 fonts-noto-cjk && \
     rm -rf /var/lib/apt/lists/*

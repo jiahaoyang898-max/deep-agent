@@ -43,8 +43,44 @@ bash start.sh
 > docker compose up -d --build
 > ```
 
-首次执行会自动完成：拉取基础镜像 → 构建 3 个业务镜像 → 启动 4 个容器 → 等待 MySQL 建库建表。
+首次执行会自动完成：拉取基础镜像 → 构建 3 个业务镜像 → 启动 4 个容器 → 等待 MySQL 建库建表 → **逐个探活三个 HTTP 服务**。
 **首次约 3~8 分钟**（取决于网络），之后再次启动只需十几秒。
+
+#### 只重建前端（改前端代码后的最快路径）
+
+改完 `ui/src/**` 后不必重建全部镜像，用 `-FrontendOnly` 只构建并重启前端容器：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start.ps1 -FrontendOnly
+```
+
+```bat
+start.bat -FrontendOnly
+```
+
+```bash
+bash start.sh --frontend
+```
+
+等价命令：`docker compose build frontend && docker compose up -d frontend`。
+
+#### 启动脚本会做的事（失败时会给出下一步）
+
+| 阶段 | 行为 |
+|---|---|
+| 环境自举 | 缺失的 `.env` / `docker/.env.docker` 从模板生成，并保证两处 MySQL 密码一致 |
+| 预检 | 检测 8080 / 8000 / 8001 / 3307 是否被占用并**报出占用进程**；检测系统盘剩余空间（< 5 GB 时提醒 Docker Desktop 镜像默认占 C 盘） |
+| 构建启动 | `docker compose up -d --build`；失败时打印 `docker compose logs` 末尾 20 行 |
+| 服务探活 | 依次请求 `http://localhost:8080/`、`http://localhost:8000/docs`、`http://localhost:8001/docs`，每个最长 60 秒（每 3 秒重试一次） |
+| 结果 | 全部通过才打印「启动成功」；未通过的服务会直接给出 `docker compose logs -f <服务名>` |
+
+探活失败时的标准排查顺序：
+
+```bash
+docker compose ps                 # 看哪个容器退出了
+docker compose logs -f backend    # 换成未通过的服务名
+docker compose up -d --force-recreate backend
+```
 
 > **关于密钥配置（重要）**
 > `.env` 与 `docker/.env.docker` 含真实 API Key 与数据库密码，**不随仓库分发**（已在 `.gitignore` 中忽略）。
