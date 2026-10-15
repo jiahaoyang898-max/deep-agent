@@ -71,8 +71,9 @@ export const api = {
   listFiles: (path: string) =>
     http.get<{ files: FileMeta[]; error?: string }>('/api/files', { params: { path } }),
 
-  /** 构造文件下载链接（走下载接口，安全校验） */
-  downloadUrl: (absPath: string) => `/api/download?path=${encodeURIComponent(absPath)}`,
+  /** 构造文件下载链接（走下载接口；<a href> 带不了请求头，令牌只能进 query） */
+  downloadUrl: (absPath: string) =>
+    `/api/download?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(getToken())}`,
 }
 
 export interface FileMeta {

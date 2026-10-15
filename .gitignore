@@ -13,6 +13,8 @@ ui/dist/
 docker-data/
 output/
 upload/
+# 工具冒烟测试产物（9 个 pdf/xlsx/docx/md 曾被误提交；文件保留在磁盘，仅移出 git 跟踪）
+tools/test_session_123/
 
 # ---- 构建产物 / 归档 ----
 ui.zip
@@ -29,3 +31,9 @@ ui.zip
 .env
 .env.local
 docker/.env.docker
+
+# 环境文件备份：含真实密钥，一律不入库（sed -i.bak 等会产生）
+.env.bak
+.env.*.bak
+docker/.env.docker.bak
+*.env.bak

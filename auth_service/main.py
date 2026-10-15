@@ -153,7 +153,10 @@ def clear_failures(ip: str, username: str) -> None:
 # ---------- 数据库 ----------
 def db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    # timeout: 并发写时等锁而不是立刻抛 "database is locked"
+    # WAL: 读写不互相阻塞，配合 timeout 才能撑住并发登录
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -196,25 +199,34 @@ class Credentials(BaseModel):
     password: str = Field(min_length=1, max_length=64)
 
 
+class VerifyRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
+
+
 # ---------- 依赖 ----------
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 bearer = HTTPBearer(auto_error=False)
 
 
-def current_user(cred: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
-    if cred is None:
-        raise HTTPException(401, "未提供认证凭证")
+def _resolve_token(token: str) -> dict:
+    """校验 token 并返回用户；无效/过期抛 401。backend 跨服务鉴权走这里。"""
     with db() as conn:
         row = conn.execute(
             """SELECT t.token, t.expires_at, u.id, u.username
                FROM tokens t JOIN users u ON u.id = t.user_id
                WHERE t.token = ?""",
-            (cred.credentials,),
+            (token,),
         ).fetchone()
     if row is None or row["expires_at"] < time.time():
         raise HTTPException(401, "登录已过期，请重新登录")
     return {"user_id": row["id"], "username": row["username"]}
+
+
+def current_user(cred: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
+    if cred is None:
+        raise HTTPException(401, "未提供认证凭证")
+    return _resolve_token(cred.credentials)
 
 
 # ---------- 接口 ----------
@@ -294,6 +306,12 @@ def logout(user=Depends(current_user), cred: HTTPAuthorizationCredentials = Depe
 @app.get("/api/auth/me")
 def me(user=Depends(current_user)):
     return {"username": user["username"]}
+
+
+@app.post("/api/auth/verify")
+def verify(body: VerifyRequest):
+    """供 backend 跨服务校验令牌（两个容器文件系统隔离，不能共享 SQLite）。"""
+    return _resolve_token(body.token)
 
 
 if __name__ == "__main__":

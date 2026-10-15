@@ -35,8 +35,9 @@ class ToolMonitor:
         """设置 FastAPI 的 WebSocket 管理器"""
         self.websocket_manager = manager
 
-    def _emit(self, event_type: str, message: str, data: Optional[Dict[str, Any]] = None):
-        """内部发送方法"""
+    def _emit(self, event_type: str, message: str, data: Optional[Dict[str, Any]] = None,
+              thread_id: Optional[str] = None):
+        """内部发送方法。thread_id 显式传入时优先于 contextvar（线程池/跨任务场景不再静默丢事件）。"""
         payload = {
             "type": "monitor_event",
             "event": event_type,
@@ -49,13 +50,13 @@ class ToolMonitor:
         if self.websocket_manager:
             try:
                 # 获取当前线程 ID
-                thread_id = get_thread_context()
+                target_thread_id = thread_id or get_thread_context()
 
                 # 确保 loop 已加载
                 manager_loop = self.websocket_manager.loop
 
                 if manager_loop:
-                    if thread_id:
+                    if target_thread_id:
                         # 检查当前是否在同一个事件循环中
                         try:
                             current_loop = asyncio.get_running_loop()
@@ -65,7 +66,7 @@ class ToolMonitor:
                         if current_loop and current_loop == manager_loop:
                             # 如果在同一个循环中（例如在 create_task 中运行），直接创建任务
                             current_loop.create_task(
-                                self.websocket_manager.send_to_thread(payload, thread_id)
+                                self.websocket_manager.send_to_thread(payload, target_thread_id)
                             )
                         else:
                             #  FastAPI 的 WebSocket 依赖异步事件循环，且协程必须在创建它的循环中运行：
@@ -73,12 +74,12 @@ class ToolMonitor:
                             #  如果在不同循环 / 不同线程（比如同步线程调用）：必须用 asyncio.run_coroutine_threadsafe（线程安全的方式），否则会报错 “协程在错误的循环中运行”。
                             # 如果在不同线程，使用 threadsafe 方法
                             asyncio.run_coroutine_threadsafe(
-                                self.websocket_manager.send_to_thread(payload, thread_id),
+                                self.websocket_manager.send_to_thread(payload, target_thread_id),
                                 manager_loop
                             )
                     else:
-                        # 如果没有 thread_id，说明可能是系统级消息，或者未上下文环境
-                        pass
+                        # 静默丢弃会让前端右侧工具日志莫名缺行，必须留痕
+                        logger.warning(f"[Monitor] 事件缺少 thread_id，无法定向推送，已丢弃: {event_type} | {message}")
             except Exception as e:
                 logger.error(f"[Monitor] WebSocket send failed: {e}")
 
@@ -93,22 +94,29 @@ class ToolMonitor:
         # 3. 控制台保底输出 (方便调试)
         logger.debug(f"[Monitor:{event_type}] {message}")
 
-    def report_tool(self, tool_name: str, args: Dict[str, Any] = None):
+    def report_tool(self, tool_name: str, args: Dict[str, Any] = None,
+                    thread_id: Optional[str] = None):
         """报告工具开始执行"""
-        self._emit("tool_start", f"开始执行工具: {tool_name}", {"tool_name": tool_name, "args": args})
+        self._emit("tool_start", f"开始执行工具: {tool_name}", {"tool_name": tool_name, "args": args},
+                   thread_id=thread_id)
 
-    def report_assistant(self, assistant_name: str, args: Dict[str, Any] = None):
+    def report_assistant(self, assistant_name: str, args: Dict[str, Any] = None,
+                         thread_id: Optional[str] = None):
         """报告正在调用的子智能体进度"""
         self._emit("assistant_call", f"正在调用助手: {assistant_name}",
-                   {"assistant_name": assistant_name, "args": args})
+                   {"assistant_name": assistant_name, "args": args}, thread_id=thread_id)
 
-    def report_task_result(self, result: str):
+    def report_task_result(self, result: str, thread_id: Optional[str] = None):
         """报告任务最终结果"""
-        self._emit("task_result", "任务执行完成", {"result": result})
+        self._emit("task_result", "任务执行完成", {"result": result}, thread_id=thread_id)
 
-    def report_session_dir(self, path: str):
+    def report_session_dir(self, path: str, thread_id: Optional[str] = None):
         """报告任务工作目录"""
-        self._emit("session_created", f"工作目录已创建: {path}", {"path": path})
+        self._emit("session_created", f"工作目录已创建: {path}", {"path": path}, thread_id=thread_id)
+
+    def report_error(self, message: str, thread_id: Optional[str] = None):
+        """报告失败原因（message 会直接显示在前端，必须是可读、可行动的原因）"""
+        self._emit("error", message, thread_id=thread_id)
 
 
 # 全局单例实例
@@ -129,20 +137,38 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, thread_id: str):
         await websocket.accept()
+        previous = self.active_connections.get(thread_id)
+        if previous is not None and previous is not websocket:
+            # 前端刷新/重连会用同一个 thread_id 再建一条连接；不关旧的就永久泄漏一条 socket
+            self.active_connections.pop(thread_id, None)
+            try:
+                await previous.close()
+            except Exception as e:
+                logger.debug(f"[Monitor] 关闭旧连接失败 {thread_id}: {e}")
         self.active_connections[thread_id] = websocket
         logger.debug(f"Client connected: {thread_id}")
 
     def disconnect(self, websocket: WebSocket, thread_id: str):
-        if thread_id in self.active_connections:
-            del self.active_connections[thread_id]
+        current = self.active_connections.get(thread_id)
+        if current is None:
+            logger.debug(f"Client disconnected (already gone): {thread_id}")
+            return
+        if current is not websocket:
+            # 旧连接迟到的断开事件不能误删当前连接
+            logger.debug(f"[Monitor] 忽略旧连接的断开事件: {thread_id}")
+            return
+        del self.active_connections[thread_id]
         logger.debug(f"Client disconnected: {thread_id}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
 
     async def send_to_thread(self, message: dict, thread_id: str):
-        if thread_id in self.active_connections:
-            websocket = self.active_connections[thread_id]
-            await websocket.send_json(message)
+        websocket = self.active_connections.get(thread_id)
+        if websocket is None:
+            # 前端还没连上（或已断开）时事件确实到不了页面，留痕便于排查"进度不显示"
+            logger.debug(f"[Monitor] 无活动连接，事件未推送: {thread_id} | {message.get('event')}")
+            return
+        await websocket.send_json(message)
 
 manager = ConnectionManager()

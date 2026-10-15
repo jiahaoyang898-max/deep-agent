@@ -10,7 +10,7 @@ import ChatMessage from '../components/ChatMessage.vue'
 import FilePanel from '../components/FilePanel.vue'
 import SessionInfo from '../components/SessionInfo.vue'
 import CommandPalette, { type Command } from '../components/CommandPalette.vue'
-import { api, authApi } from '../api'
+import { api, authApi, getToken } from '../api'
 import type { FileMeta } from '../api'
 import type { Message } from '../types'
 import { relativeTime } from '../types'
@@ -125,7 +125,15 @@ async function scrollToBottom(smooth = true) {
 /* ================= WebSocket ================= */
 function connectWebSocket() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${proto}://${location.host}/ws/${currentThreadId.value}`)
+  // 浏览器 WebSocket API 不能自定义请求头，令牌只能走 query 参数（后端强制校验）
+  const token = getToken()
+  if (!token) {
+    // 未登录时不建连，避免无意义的重连风暴（登录态由 App.vue 统一切回登录页）
+    return
+  }
+  const ws = new WebSocket(
+    `${proto}://${location.host}/ws/${currentThreadId.value}?token=${encodeURIComponent(token)}`,
+  )
   ws.onopen = () => (wsConnected.value = true)
   ws.onmessage = (e) => {
     try {

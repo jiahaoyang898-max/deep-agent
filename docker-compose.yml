@@ -58,8 +58,15 @@ services:
     ports:
       # 只监听回环，浏览器与 Nginx 都通过 8080 网关访问
       - "127.0.0.1:8001:8001"
+    healthcheck:
+      # exec 形式避免 YAML/shell 双重转义；auth 自带 GET /health
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # ---------- 后端（FastAPI + DeepAgent，原代码零改动）----------
+  # ---------- 后端（FastAPI + DeepAgent 智能体）----------
   backend:
     build:
       context: .
@@ -68,6 +75,11 @@ services:
     restart: unless-stopped
     env_file:
       - docker/.env.docker
+    environment:
+      # 令牌由 auth 签发，backend 必须跨服务校验（容器网络里的服务名是 auth）
+      AUTH_SERVICE_URL: http://auth:8001
+      # 鉴权开关：默认开启，仅排障时才显式设为 false
+      AUTH_REQUIRED: "true"
     volumes:
       - ./output:/app/output   # 智能体产出文件
       - ./upload:/app/upload   # 上传文件
@@ -75,9 +87,18 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      auth:
+        condition: service_healthy
     ports:
       # 只监听回环，便于本机调试直连
       - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # 首次构建智能体/加载依赖较慢，给足启动窗口
+      start_period: 60s
 
   # ---------- 前端（Nginx 托管 + 网关）----------
   frontend:
@@ -91,7 +112,16 @@ services:
     container_name: das-frontend
     restart: unless-stopped
     depends_on:
-      - backend
-      - auth
+      # 只保证启动顺序不够：网关起来时后端若还没就绪，用户就会看到空白页/请求失败
+      backend:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     ports:
       - "8080:80" # 浏览器访问 http://localhost:8080（对外唯一入口）
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

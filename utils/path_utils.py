@@ -5,6 +5,14 @@ import os
 from pathlib import Path
 from typing import Optional
 
+def _clamp_to_session(session_path: Path, relative: str) -> str:
+    """把相对片段限制在会话目录内：越界（../）时退化为只取文件名落在会话目录。"""
+    candidate = (session_path / relative).resolve()
+    if candidate.is_relative_to(session_path):
+        return str(candidate)
+    return str(session_path / Path(str(relative).replace("\\", "/")).name)
+
+
 def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
     """
     统一的文件路径解析工具方法。
@@ -19,7 +27,7 @@ def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
     | 输入场景                | filename                          | session_dir                      | 核心操作                          | 最终结果                          |
     |-------------------------|-----------------------------------|----------------------------------|-----------------------------------|-----------------------------------|
     | 虚拟路径清洗            | /workspace/report.md              | D:/Project/output/session_123    | 剥离/workspace → 拼接到会话目录   | D:/Project/output/session_123/report.md |
-    | upload/ 特殊处理       | abc/upload/upload/file.pdf       | D:/Project/output/session_123    | 提取upload/后路径 → 解析到CWD    | D:/Project/upload/upload/file.pdf |
+    | upload/ 特殊处理       | abc/upload/report.pdf              | D:/Project/output/session_123    | 提取最后一个 upload/ 后路径 → 落回会话目录 | D:/Project/output/session_123/report.pdf |
     | 无会话目录              | sub/test.md                       | None                             | 直接解析为CWD下绝对路径           | D:/Project/sub/test.md            |
     | 绝对路径（会话内）      | D:/Project/output/session_123/sub/report.md | D:/Project/output/session_123 | 验证在会话内 → 无嵌套 → 直接返回  | D:/Project/output/session_123/sub/report.md |
     | 绝对路径（会话外）      | D:/OtherDir/file.md               | D:/Project/output/session_123    | 验证不在会话内 → 保留原路径       | D:/OtherDir/file.md               |
@@ -28,7 +36,7 @@ def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
     | 相对路径（含session名） | session_123/report.md             | D:/Project/output/session_123    | 含session名 → 防止嵌套 → 会话目录+文件名 | D:/Project/output/session_123/report.md |
     | 相对路径（output前缀）  | output/report.md                  | D:/Project/output/session_123    | 含output前缀 → 会话目录+文件名    | D:/Project/output/session_123/report.md |
     | 普通相对路径            | sub1/sub2/test.md                 | D:/Project/output/session_123    | 无特殊标识 → 拼接到会话目录       | D:/Project/output/session_123/sub1/sub2/test.md |
-    | 虚拟路径+upload        | /mnt/data/upload/doc.md          | D:/Project/output/session_123    | 剥离/mnt/data → 触发upload处理   | D:/Project/upload/doc.md         |
+    | 虚拟路径+upload        | /mnt/data/upload/doc.md          | D:/Project/output/session_123    | 剥离/mnt/data → 触发upload处理   | D:/Project/output/session_123/doc.md |
     | Linux系统绝对路径       | /home/user/test.md                | /data/session_123（Linux）       | 剥离/home/user → 拼接到Linux会话目录 | /data/session_123/test.md         |
 
     Args:
@@ -52,10 +60,12 @@ def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
             break
 
     # 2. 特殊处理：upload/ (用户上传文件)
-    # 只要路径中包含 upload/，就提取其后半部分，并相对于 CWD 解析
+    # 上传的文件在任务开始前已被拷贝进会话目录，所以取 upload/ 之后的部分并强制落回 session 目录；
+    # 旧实现是「相对 CWD 解析」，一句 upload/../../x 就能跳出会话隔离读到别人的文件。
     if "upload/" in path_str:
-        idx = path_str.find("upload/")
-        relative_part = path_str[idx:]
+        relative_part = path_str.rsplit("upload/", 1)[1].lstrip("/")
+        if session_dir:
+            return _clamp_to_session(Path(session_dir).resolve(), relative_part)
         return str(Path(relative_part).resolve())
 
     if not session_dir:
@@ -106,5 +116,5 @@ def resolve_path(filename: str, session_dir: Optional[str] = None) -> str:
         if parts and parts[0] == "output":
             return str(session_path / path.name)
 
-        # 默认：拼接到 session_dir
-        return str(session_path / path)
+        # 默认：拼接到 session_dir（../ 越界时退化为会话目录内的文件名）
+        return _clamp_to_session(session_path, path_str)

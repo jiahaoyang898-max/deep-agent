@@ -1,10 +1,11 @@
 # [核心] 智能体组装与执行逻辑
 import shutil
+from functools import lru_cache
 from pathlib import Path
 
 from deepagents import create_deep_agent
 
-from agent.llm import model as llm
+from agent.llm import get_model
 from agent.load_prompts import main_agent_config
 from agent.sub_agents.rag_sub_agent import rag_sub_agent
 from agent.sub_agents.db_sub_agent import db_sub_agent
@@ -16,19 +17,67 @@ from tools.pdf_tools import convert_md_to_pdf
 from tools.upload_file_read_tool import read_file_content
 from utils.logger_utils import logger
 
-print(main_agent_config['system_prompt'])
-main_agent = create_deep_agent(
-    model=llm,
-    system_prompt=main_agent_config['system_prompt'],
-    subagents=[rag_sub_agent, db_sub_agent, internet_sub_agent],
-    tools=[read_file_content, generate_markdown, convert_md_to_pdf]
-)
+
+# 惰性构建 + 进程内缓存：每次请求重建会丢会话状态且更慢，模型异常也要留到这里才报得准
+@lru_cache(maxsize=1)
+def get_main_agent():
+    logger.info("初始化主智能体（首次调用时构建）")
+    return create_deep_agent(
+        model=get_model(),
+        system_prompt=main_agent_config['system_prompt'],
+        subagents=[rag_sub_agent, db_sub_agent, internet_sub_agent],
+        tools=[read_file_content, generate_markdown, convert_md_to_pdf]
+    )
 
 
-def _report_agent_process(chunk):
+def _root_cause(exc: BaseException) -> BaseException:
+    """顺着 __cause__ / __context__ 找到最内层的真实根因（外层常只是包装）。"""
+    root = exc
+    seen = {id(exc)}
+    while True:
+        nxt = getattr(root, "__cause__", None) or getattr(root, "__context__", None)
+        if not isinstance(nxt, BaseException) or id(nxt) in seen:
+            return root
+        seen.add(id(nxt))
+        root = nxt
+
+
+def describe_agent_failure(exc: BaseException) -> str:
+    """把异常翻译成「类型 + 可读原因 + 针对性指引」，用于回传前端展示。"""
+    root = _root_cause(exc)
+    name = type(root).__name__
+    text = str(root)
+    lowered = text.lower()
+    status = getattr(root, "status_code", None) or getattr(root, "code", None)
+
+    if status == 401 or status == 403 or "invalid api-key" in lowered or "api key" in lowered \
+            or name in ("AuthenticationError", "PermissionDeniedError"):
+        reason = "模型 API Key 无效或已过期（401/403）"
+        guide = "请更新 docker/.env.docker 中的 DASHSCOPE_API_KEY，然后执行 docker compose up -d backend 重启后端"
+    elif status == 429 or "rate limit" in lowered or "insufficient" in lowered:
+        reason = "模型服务限流或额度不足（429）"
+        guide = "请检查阿里云百炼账户额度/限流，稍后重试"
+    elif "ssl" in lowered or "certificate" in lowered:
+        reason = "模型服务 SSL/HTTPS 证书校验失败"
+        guide = "请检查网络代理与证书配置（常见于本地代理拦截 HTTPS）"
+    elif "timeout" in lowered or "timed out" in lowered or name in ("APITimeoutError", "TimeoutError"):
+        reason = "模型服务连接超时"
+        guide = "请确认 DASHSCOPE_BASE_URL 可访问、本机代理/网络通畅"
+    elif "connection" in lowered or "connect" in lowered or name in ("APIConnectionError", "ConnectionError"):
+        reason = "无法连接模型服务"
+        guide = "请检查 DASHSCOPE_BASE_URL 与网络/代理设置"
+    elif status == 400 or name == "BadRequestError" or "context" in lowered and "length" in lowered:
+        reason = "模型请求被拒绝（参数或上下文长度问题）"
+        guide = "请缩短提问或减少上传文件后重试"
+    else:
+        reason = text or name
+        guide = "请把本条时间与后端日志中的完整堆栈发给维护者"
+
+    return f"智能体执行失败：{name}｜原因：{reason}｜指引：{guide}"
+
+
+def _report_agent_process(chunk, thread_id: str):
     for key, value in chunk.items():
-        # print(f"=={key}==")
-        # print(value)
         if not value or "messages" not in value: continue
         message = value["messages"][-1]
         if key == "model":
@@ -36,19 +85,12 @@ def _report_agent_process(chunk):
                 for tool_call in message.tool_calls:
                     # 区分子智能体和工具
                     if tool_call["name"] == "task":
-                        # print( f"--准备调用子智能体{tool_call['args']['subagent_type']}, 参数：{tool_call['args']['description']}")
-                        monitor.report_assistant(tool_call['args']['subagent_type'], tool_call['args']['description'])
+                        monitor.report_assistant(tool_call['args']['subagent_type'], tool_call['args']['description'],
+                                                 thread_id=thread_id)
                     else:
-                        # print(f"--智能体准备调用工具{tool_call['name']}, 参数：{tool_call['args']}")
-                        monitor.report_tool(tool_call['name'], tool_call['args'])
+                        monitor.report_tool(tool_call['name'], tool_call['args'], thread_id=thread_id)
             elif message.content:
-                # print(f"--智能体返回最终结果: {message.content}")
-                monitor.report_task_result(message.content)
-        # elif key == "tools":
-        #     if message.name == "task":
-        #         print(f"--调用子智能体返回的结果为：{message.content}")
-        #     else:
-        #         print(f"--调用工具{message.name}返回的结果为：{message.content}")
+                monitor.report_task_result(message.content, thread_id=thread_id)
 
 
 async def run_deep_agent(query: str, thread_id: str):
@@ -61,7 +103,7 @@ async def run_deep_agent(query: str, thread_id: str):
     session_dir.mkdir(parents=True, exist_ok=True)  # 确保输出目录存在
     session_dir_str = str(session_dir).replace("\\", "/")  # 生成完整路径字符串
     session_token = set_session_context(session_dir_str)  # 保存session_dir_str
-    monitor.report_session_dir(session_dir_str)  # 告诉前端，当前会话的输出目录, 浏览器才能在右侧显示会话文件列表
+    monitor.report_session_dir(session_dir_str, thread_id=thread_id)  # 告诉前端当前会话的输出目录, 浏览器才能在右侧显示会话文件列表
 
     # 将upload中的文件拷贝到session目录中
     upload_dir = project_dir / "upload" / f"session_{thread_id}"
@@ -92,7 +134,7 @@ async def run_deep_agent(query: str, thread_id: str):
 
     try:
         # 执行agent,遍历过程数据，并将特定数据信息发送给前端
-        result = main_agent.astream({
+        result = get_main_agent().astream({
             "messages": [{
                 "role": "user",
                 "content": f"问题：{query}, 补充描述: {path_instruction}"
@@ -100,10 +142,11 @@ async def run_deep_agent(query: str, thread_id: str):
         })
         async for chunk in result:
             # 遍历每个chunk,向前端发送当前状态及数据
-            _report_agent_process(chunk)
+            _report_agent_process(chunk, thread_id)
     except Exception as e:
-        logger.error(f"智能体执行最终失败：{e}")
-        monitor._emit("error", "智能体执行最终失败了")
+        # 堆栈进日志留细节，可读原因回传前端（否则用户只能看到无信息量的兜底文案）
+        logger.exception(f"智能体执行失败 thread_id={thread_id}")
+        monitor.report_error(describe_agent_failure(e), thread_id=thread_id)
     finally:  # 最终都要重置保存的thread_id和session_dir
         reset_session_context(session_token, thread_token)
 
