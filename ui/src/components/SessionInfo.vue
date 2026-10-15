@@ -88,7 +88,8 @@ function copyPath() {
   justify-content: space-between;
   gap: 10px;
   padding: 9px 12px;
-  background: var(--c-surface);
+  /* 会话信息表=内嵌子层，用深色内嵌底锁死局部背景，语义色文字才稳 */
+  background: var(--c-surface-2);
 }
 .k {
   font-size: 12.5px;
@@ -138,13 +139,19 @@ function copyPath() {
 }
 .copy-btn {
   font-size: 11px;
-  color: var(--c-brand);
-  padding: 2px 7px;
-  border-radius: var(--r-xs);
-  transition: background var(--dur-1);
+  font-weight: 600;
+  /* 品牌色当文字必须用文字档（--c-brand 是填充档，深底上作文字仅 ~2.3:1） */
+  color: var(--c-brand-text);
+  background: var(--c-brand-soft);
+  border: 1px solid var(--c-brand-line);
+  padding: 2px 9px;
+  border-radius: var(--r-full);
+  transition: background var(--dur-1), border-color var(--dur-1), color var(--dur-1);
 }
 .copy-btn:hover {
-  background: var(--c-brand-soft);
+  background: rgba(61, 73, 201, 0.55);
+  border-color: rgba(173, 180, 255, 0.66);
+  color: #fff;
 }
 .path {
   font-size: 11px;

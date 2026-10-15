@@ -172,16 +172,15 @@ const items = computed(() =>
   align-items: center;
   gap: 10px;
   padding: 10px 11px 10px 14px;
-  background: var(--c-surface);
+  background: var(--c-surface-2);
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
-  box-shadow: var(--sh-1);
   overflow: hidden;
-  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2);
+  transition: transform var(--dur-2) var(--ease-out), border-color var(--dur-2);
 }
 .file-row:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--sh-3);
+  transform: translateY(-1px);
+  border-color: var(--c-line-strong);
 }
 .stripe {
   position: absolute;
@@ -204,7 +203,7 @@ const items = computed(() =>
 .name {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--c-text);
+  color: var(--c-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -226,7 +225,7 @@ const items = computed(() =>
   opacity: 0.6;
 }
 .dl {
-  color: var(--c-brand);
+  color: var(--c-brand-text);
   font-size: 14px;
   opacity: 0;
   transition: opacity var(--dur-1);

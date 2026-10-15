@@ -156,7 +156,7 @@ onMounted(() => {
         </div>
 
         <!-- 执行步骤时间线 -->
-        <div v-if="steps.length" class="steps-card glass glowline">
+        <div v-if="steps.length" class="steps-card glowline">
           <button class="steps-head" :aria-expanded="logsOpen" @click="logsOpen = !logsOpen">
             <span class="state" :class="working ? 'run' : 'ok'">
               <i v-if="working" class="spin"></i>
@@ -243,12 +243,13 @@ onMounted(() => {
   align-items: flex-end;
 }
 .bubble-user {
-  padding: 12px 17px;
-  background: var(--c-grad);
-  color: #fff;
+  padding: 11px 16px;
+  /* 白胶囊 + 墨字：满屏深色里唯一的实心亮面，作为「这句是我说的」对比锚点（设计说明 §2.6） */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(243, 245, 255, 0.93));
+  color: #1b2137;
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 18px 18px 6px 18px;
-  box-shadow: 0 6px 20px rgba(85, 99, 255, 0.26);
-  font-size: 14.5px;
+  font-size: 13.5px;
   line-height: 1.72;
   white-space: pre-wrap;
   word-break: break-word;
@@ -267,7 +268,7 @@ onMounted(() => {
   gap: 8px;
   padding: 9px 16px;
   background: var(--c-rose-soft);
-  border: 1px solid #f3cdcb;
+  border: 1px solid rgba(248, 113, 113, 0.44);
   color: var(--c-rose);
   border-radius: var(--r-full);
   font-size: 13px;
@@ -285,10 +286,10 @@ onMounted(() => {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: var(--c-grad);
+  /* 品牌色作实心填充档（--c-brand），非文字档 */
+  background: var(--c-brand);
   display: grid;
   place-items: center;
-  box-shadow: var(--sh-brand);
   margin-top: 3px;
 }
 .ai-body {
@@ -324,7 +325,9 @@ onMounted(() => {
   border-radius: var(--r-md);
   overflow: hidden;
   margin-bottom: 10px;
-  background: var(--c-surface);
+  /* 次级件用深色内嵌底 + 发丝描边（不叠毛玻璃） */
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
 }
 .steps-head {
   width: 100%;
@@ -359,7 +362,7 @@ onMounted(() => {
 .spin {
   width: 11px;
   height: 11px;
-  border: 2px solid rgba(8, 145, 178, 0.25);
+  border: 2px solid rgba(34, 211, 238, 0.28);
   border-top-color: var(--c-cyan);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -408,12 +411,12 @@ onMounted(() => {
   height: 7px;
   border-radius: 50%;
   background: var(--c-grass);
-  box-shadow: 0 0 0 3px var(--c-grass-soft);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.15);
   z-index: 1;
 }
 .step.running .node i {
   background: var(--c-cyan);
-  box-shadow: 0 0 0 3px var(--c-cyan-soft);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
   animation: breathe 1.1s ease-in-out infinite;
 }
 .step-main {
@@ -437,14 +440,20 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 耗时读数：深色内嵌底 + 琥珀色描边/文字（提亮档），作仪表读数而非糖色块 */
 .step-elapsed {
   margin-left: auto;
   font-size: 11px;
   color: var(--c-amber);
   background: var(--c-amber-soft);
+  border: 1px solid rgba(251, 191, 36, 0.3);
   border-radius: var(--r-xs);
   padding: 1px 6px;
   white-space: nowrap;
+}
+.step.running .step-elapsed {
+  color: var(--c-cyan);
+  border-color: rgba(34, 211, 238, 0.36);
 }
 .step-detail {
   margin-top: 4px;
@@ -456,7 +465,7 @@ onMounted(() => {
   width: fit-content;
 }
 .step-detail summary:hover {
-  color: var(--c-brand);
+  color: var(--c-brand-text);
 }
 .step-detail pre {
   margin-top: 5px;
@@ -480,22 +489,17 @@ onMounted(() => {
   transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 
-/* 正文气泡：层次来自描边 + 极浅阴影 */
+/* 正文直接落在玻璃面板上，不再套卡（设计说明 §3：普通段落包卡制造容器噪声；
+   只有步骤时间线 / 数据表 / 文件产物才是次级面板） */
 .bubble-ai {
-  padding: 14px 18px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 6px 18px 18px 18px;
-  box-shadow: var(--sh-1);
+  padding: 2px 0;
+  font-size: 13.5px;
+  line-height: 1.78;
 }
 .typing {
   display: inline-flex;
   gap: 5px;
-  padding: 14px 18px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 6px 18px 18px 18px;
-  box-shadow: var(--sh-1);
+  padding: 8px 2px;
 }
 .typing i {
   width: 7px;
@@ -524,16 +528,15 @@ onMounted(() => {
   align-items: center;
   gap: 9px;
   padding: 9px 13px 9px 15px;
-  background: var(--c-surface);
+  background: var(--c-surface-2);
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
-  box-shadow: var(--sh-1);
   overflow: hidden;
-  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2);
+  transition: transform var(--dur-2) var(--ease-out), border-color var(--dur-2);
 }
 .file-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--sh-3);
+  transform: translateY(-1px);
+  border-color: var(--c-line-strong);
 }
 .stripe {
   position: absolute;
@@ -548,14 +551,14 @@ onMounted(() => {
 .f-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--c-text);
+  color: var(--c-ink);
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .f-dl {
-  color: var(--c-brand);
+  color: var(--c-brand-text);
   font-size: 14px;
   opacity: 0;
   transition: opacity var(--dur-1);
@@ -576,17 +579,21 @@ onMounted(() => {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--c-text-3);
-  padding: 3px 9px;
-  border-radius: var(--r-xs);
+  padding: 5px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
   opacity: 0;
-  transition: opacity var(--dur-1), background var(--dur-1), color var(--dur-1);
+  transition: opacity var(--dur-1), background var(--dur-1), color var(--dur-1),
+    border-color var(--dur-1);
 }
 .ai:hover .act,
 .act:focus-visible {
   opacity: 1;
 }
 .act:hover {
-  background: var(--c-brand-soft);
-  color: var(--c-brand);
+  color: var(--c-ink);
+  background: var(--c-bg-2);
+  border-color: var(--c-line-strong);
 }
 </style>

@@ -38,7 +38,18 @@ const taskFinishedAt = ref<number | null>(null)
 const now = ref(Date.now())
 let ticker: number | undefined
 
+/* ================= 实时时钟（HUD 读数，格式 HH:MM:SS） ================= */
+function formatClock(d: Date) {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+const clock = ref(formatClock(new Date()))
+let clockTimer: number | undefined
+
 const isWelcome = computed(() => messages.value.length === 0)
+
+/** 底部刻度尺读数：真实线程 ID 前 8 位 */
+const threadShort = computed(() => currentThreadId.value.slice(0, 8))
 
 /** 最后一条 AI 消息的步骤数（真实数据） */
 const stepCount = computed(() => {
@@ -469,11 +480,13 @@ onMounted(() => {
   document.addEventListener('click', onDocClick)
   window.addEventListener('keydown', onGlobalKeydown)
   ticker = window.setInterval(() => (now.value = Date.now()), 1000)
+  clockTimer = window.setInterval(() => (clock.value = formatClock(new Date())), 1000)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick)
   window.removeEventListener('keydown', onGlobalKeydown)
   if (ticker) clearInterval(ticker)
+  if (clockTimer) clearInterval(clockTimer)
   socket.value?.close()
 })
 
@@ -484,10 +497,19 @@ watch(status, (v) => {
 
 <template>
   <div class="page" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-    <div class="ambient" aria-hidden="true">
-      <span class="orb" style="width: 380px; height: 380px; left: -110px; top: -90px; background: radial-gradient(circle, rgba(85, 99, 255, 0.24), transparent 70%)"></span>
-      <span class="orb" style="width: 320px; height: 320px; right: -90px; bottom: -110px; background: radial-gradient(circle, rgba(168, 85, 247, 0.19), transparent 70%); animation-delay: -6s"></span>
+    <!-- ① 背景层：摄影底 + 冷调遮罩 + 测绘网格 + 胶片颗粒 -->
+    <div class="backdrop" aria-hidden="true">
+      <div class="photo"></div>
+      <div class="scrim"></div>
+      <div class="grid"></div>
+      <div class="grain"></div>
     </div>
+
+    <!-- ④ 四角取景角标（压在面板之上、不挡点击） -->
+    <span class="brk tl" aria-hidden="true"></span>
+    <span class="brk tr" aria-hidden="true"></span>
+    <span class="brk bl" aria-hidden="true"></span>
+    <span class="brk br" aria-hidden="true"></span>
 
     <!-- ===== 顶栏 ===== -->
     <header class="topbar glass">
@@ -506,10 +528,16 @@ watch(status, (v) => {
       </div>
 
       <div class="right">
-        <span class="conn chip" :class="wsConnected ? 'chip-grass' : 'chip-amber'" :title="wsConnected ? '实时通道已连接' : '实时通道重连中'">
-          <i class="conn-dot" :class="{ on: wsConnected }"></i>
-          {{ wsConnected ? '实时通道正常' : '重连中' }}
-        </span>
+        <div class="readout-group">
+          <span class="readout local" title="全部数据在本机内网处理">
+            <i class="dot dot-grass" aria-hidden="true"></i>LOCAL · 数据不出内网
+          </span>
+          <span class="readout" :title="wsConnected ? '实时通道已连接' : '实时通道重连中'">
+            <i class="dot" :class="wsConnected ? 'dot-grass' : 'dot-amber'" aria-hidden="true"></i>
+            实时通道 · {{ wsConnected ? '已连接' : '重连中' }}
+          </span>
+          <span class="readout mono">{{ clock }}</span>
+        </div>
 
         <button class="btn btn-ghost new-btn" type="button" :title="`开启新会话（${mod} + Enter）`" @click="newChat">
           ＋ 新会话
@@ -752,6 +780,13 @@ watch(status, (v) => {
       </button>
     </div>
 
+    <!-- ③ 底部刻度尺 -->
+    <footer class="foot">
+      <span class="mono">SESSION {{ threadShort }}</span>
+      <span class="ruler" aria-hidden="true"></span>
+      <span class="mono">v2.0 · 冰川观测站</span>
+    </footer>
+
     <CommandPalette :open="paletteOpen" :commands="commands" @close="paletteOpen = false" />
 
     <!-- 拖拽遮罩 -->
@@ -768,27 +803,118 @@ watch(status, (v) => {
 </template>
 
 <style scoped>
+/* ============================================================
+   深色「冰川观测站」工作台
+   视觉规范以设计稿（das-ui/inner/_inner-page-mockup）为准，
+   所有颜色一律走 .page 作用域下的深色令牌，不新增硬编码色值；
+   仅背景层遮罩/网格/颗粒、角标描边按设计稿原样搬入。
+   ============================================================ */
+
+/* ===== 外壳：留边 + 分缝，摄影底在面板四周形成「外框」 ===== */
 .page {
   position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  padding: 26px 28px 14px;
   background: var(--c-bg);
   overflow: hidden;
 }
 
-/* ===== 顶栏 ===== */
+/* ===== ① 背景层 ===== */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.photo {
+  position: absolute;
+  inset: -3%;
+  background: url("/cover.jpg") center 48% / cover no-repeat;
+  filter: saturate(0.9) contrast(1.02);
+}
+.scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(82% 68% at 50% 52%, rgba(6, 10, 22, 0.46) 0%, rgba(6, 10, 22, 0.32) 62%, rgba(5, 8, 18, 0.1) 100%),
+    linear-gradient(180deg, rgba(6, 10, 22, 0.44) 0%, rgba(6, 10, 22, 0.14) 18%, rgba(6, 10, 22, 0.2) 78%, rgba(5, 8, 18, 0.5) 100%),
+    linear-gradient(120deg, rgba(38, 54, 110, 0.16) 0%, rgba(20, 32, 70, 0.02) 52%, rgba(14, 44, 66, 0.13) 100%);
+}
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(190, 214, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(190, 214, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(190, 214, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(190, 214, 255, 0.035) 1px, transparent 1px);
+  background-size: 320px 320px, 320px 320px, 80px 80px, 80px 80px;
+  -webkit-mask-image: radial-gradient(130% 100% at 50% 50%, #000 32%, transparent 88%);
+  mask-image: radial-gradient(130% 100% at 50% 50%, #000 32%, transparent 88%);
+}
+.grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ===== ④ 四角取景角标 ===== */
+.brk {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid rgba(255, 255, 255, 0.34);
+  pointer-events: none;
+  z-index: 5;
+}
+.brk.tl {
+  top: 12px;
+  left: 12px;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 5px 0 0 0;
+}
+.brk.tr {
+  top: 12px;
+  right: 12px;
+  border-left: 0;
+  border-bottom: 0;
+  border-radius: 0 5px 0 0;
+}
+.brk.bl {
+  bottom: 12px;
+  left: 12px;
+  border-right: 0;
+  border-top: 0;
+  border-radius: 0 0 0 5px;
+}
+.brk.br {
+  bottom: 12px;
+  right: 12px;
+  border-left: 0;
+  border-top: 0;
+  border-radius: 0 0 5px 0;
+}
+
+/* ===== 顶栏（玻璃条，圆角 = 与三栏同规格） ===== */
 .topbar {
   position: relative;
-  z-index: 20;
+  z-index: 9;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 18px;
-  border: none;
-  border-bottom: 1px solid var(--c-line);
-  border-radius: 0;
+  min-height: 60px;
+  padding: 10px 20px;
+  border-radius: var(--r-lg);
+  animation: riseIn var(--dur-3) var(--ease-out) both;
 }
 .left {
   display: flex;
@@ -800,7 +926,7 @@ watch(status, (v) => {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: var(--c-grad);
+  background: var(--c-grad-deep);
   color: #fff;
   font-size: 15px;
   display: grid;
@@ -853,22 +979,45 @@ watch(status, (v) => {
 .right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex: 0 0 auto;
 }
-.conn {
-  padding: 4px 10px;
+/* ② HUD 读数区：LOCAL / 连接状态 / 实时时钟 */
+.readout-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
-.conn-dot {
-  width: 7px;
-  height: 7px;
+.readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--c-text-3);
+  white-space: nowrap;
+}
+.readout.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-2);
+  letter-spacing: 0.04em;
+}
+.dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--c-amber);
-  animation: breathe 1.2s ease-in-out infinite;
+  flex: 0 0 auto;
+  background: var(--c-text-3);
 }
-.conn-dot.on {
+.dot-grass {
   background: var(--c-grass);
-  animation: none;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+}
+.dot-amber {
+  background: var(--c-amber);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16);
+  animation: breathe 1.2s ease-in-out infinite;
 }
 .new-btn {
   padding: 7px 14px;
@@ -897,7 +1046,7 @@ watch(status, (v) => {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--c-grad);
+  background: var(--c-grad-deep);
   color: #fff;
   font-size: 12.5px;
   font-weight: 700;
@@ -980,10 +1129,43 @@ watch(status, (v) => {
 
 /* ===== 三栏 ===== */
 .body {
+  /* 关键：.backdrop 是 position:absolute + z-index:0，会创建层叠上下文、
+     画在「非定位内容」之上。.body 若只有 position:relative 而 z-index:auto，
+     不创建层叠上下文，三栏（非定位）仍会被照片盖住 —— 表现为面板「透明」、
+     徽章/按键的对比度全部失守。这里显式 z-index:1 让三栏整体垫到照片之上。 */
   position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+/* ===== ③ 底部刻度尺（对齐设计稿 .foot） ===== */
+.foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 30px;
+  padding: 0 10px;
+  color: var(--c-text-3);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.ruler {
+  flex: 1;
+  height: 8px;
+  color: var(--c-text-3);
+  background-image: repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 96px);
+  background-size: 100% 4px, 100% 8px;
+  background-repeat: no-repeat, no-repeat;
+  background-position: left bottom, left bottom;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }
 .side {
   display: flex;
@@ -993,7 +1175,10 @@ watch(status, (v) => {
 .left-side {
   width: 244px;
   border-right: 1px solid var(--c-line);
-  background: rgba(255, 255, 255, 0.5);
+  /* 深色玻璃面板：微光渐变层 + 深色填充层（令牌见 style.css 的 .page 段） */
+  background: var(--c-surface-glass);
+  backdrop-filter: blur(22px) saturate(128%);
+  -webkit-backdrop-filter: blur(22px) saturate(128%);
 }
 .side-head {
   display: flex;
@@ -1145,6 +1330,13 @@ watch(status, (v) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* 设计稿里中栏是一块独立的玻璃面板；浅色期它靠 body 的浅底撑着，
+     换成摄影底后必须自己铺玻璃底，否则照片直接穿透对话区。 */
+  background: var(--c-surface-glass);
+  backdrop-filter: blur(22px) saturate(128%);
+  -webkit-backdrop-filter: blur(22px) saturate(128%);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
 }
 
 /* 欢迎屏 */
@@ -1162,7 +1354,7 @@ watch(status, (v) => {
   width: 60px;
   height: 60px;
   border-radius: 20px;
-  background: var(--c-grad);
+  background: var(--c-grad-deep);
   color: #fff;
   font-size: 26px;
   display: grid;
@@ -1334,8 +1526,9 @@ watch(status, (v) => {
   align-items: flex-end;
   gap: 8px;
   padding: 9px 11px;
-  background: var(--c-surface);
-  border: 1.5px solid var(--c-line);
+  /* 输入区是「内嵌在面板上的深色槽」，比面板底再暗一档（设计稿 rgba(6,10,22,.5)） */
+  background: var(--c-surface-2);
+  border: 1.5px solid var(--c-line-strong);
   border-radius: 20px;
   box-shadow: var(--sh-2);
   transition: border-color var(--dur-2), box-shadow var(--dur-2);
@@ -1369,7 +1562,7 @@ watch(status, (v) => {
   place-items: center;
   font-size: 15px;
   color: #fff;
-  background: var(--c-grad);
+  background: var(--c-grad-deep);
   background-size: 170% 170%;
   box-shadow: var(--sh-brand);
   flex: 0 0 auto;
@@ -1425,7 +1618,9 @@ watch(status, (v) => {
 .right-side {
   width: 292px;
   border-left: 1px solid var(--c-line);
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--c-surface-glass);
+  backdrop-filter: blur(22px) saturate(128%);
+  -webkit-backdrop-filter: blur(22px) saturate(128%);
 }
 .tabs {
   position: relative;
@@ -1491,7 +1686,7 @@ watch(status, (v) => {
   position: fixed;
   inset: 0;
   z-index: 300;
-  background: rgba(85, 99, 255, 0.09);
+  background: rgba(6, 10, 22, 0.5);
   backdrop-filter: blur(3px);
   display: grid;
   place-items: center;

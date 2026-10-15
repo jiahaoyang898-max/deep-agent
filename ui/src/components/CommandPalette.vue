@@ -151,8 +151,9 @@ function indexOf(cmd: Command): number {
 .palette-mask {
   position: fixed;
   inset: 0;
+  /* z-index 400 高于三栏（ChatView 内最大 300），浮层恒在三栏之上 */
   z-index: 400;
-  background: rgba(15, 20, 36, 0.32);
+  background: rgba(6, 10, 22, 0.55);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-start;
@@ -162,9 +163,14 @@ function indexOf(cmd: Command): number {
 .palette {
   width: min(560px, 92vw);
   border-radius: var(--r-lg);
-  box-shadow: var(--sh-4);
+  /* 浮层底：玻璃渐变之外再叠一层高不透明度深色。
+     否则下层面板文字会透过玻璃与面板文字叠成重影（设计稿踩过的坑）。 */
+  background: var(--c-surface-glass), rgba(9, 14, 30, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(26px) saturate(120%);
+  -webkit-backdrop-filter: blur(26px) saturate(120%);
+  box-shadow: var(--sh-4), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   overflow: hidden;
-  background: var(--c-surface);
 }
 
 .palette-input {
@@ -175,7 +181,7 @@ function indexOf(cmd: Command): number {
   border-bottom: 1px solid var(--c-line);
 }
 .palette-input .ico {
-  color: var(--c-brand);
+  color: var(--c-brand-text);
   font-size: 15px;
 }
 .palette-input input {
@@ -211,12 +217,15 @@ function indexOf(cmd: Command): number {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
+  border: 1px solid transparent;
   border-radius: var(--r-sm);
   text-align: left;
-  transition: background var(--dur-1);
+  transition: background var(--dur-1), border-color var(--dur-1);
 }
 .cmd.active {
-  background: var(--c-brand-soft);
+  /* 选中项=行级高亮（白字仍在上面，非同色系文字），用品牌淡填充最清晰 */
+  background: rgba(85, 99, 255, 0.2);
+  border-color: rgba(85, 99, 255, 0.44);
 }
 .cmd-label {
   font-size: 13.5px;

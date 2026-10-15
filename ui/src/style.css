@@ -37,6 +37,11 @@
   --c-brand-line: #c9cfff;
   --c-violet: #8b5cf6;
   --c-grad: linear-gradient(135deg, #5563ff 0%, #7c5cf6 58%, #a855f7 100%);
+  /* 深色档：给「内部要压白字的实心块」用（logo / 头像 / 发送键）。
+     浅色期与 --c-grad 同值；深色期由 .page 覆盖成压暗版 —— 用同名令牌而不是
+     在 .page 里写后代选择器覆盖，是因为组件是 scoped 样式、层叠顺序在后，
+     后代选择器特异性打不平，覆盖根本不生效。 */
+  --c-grad-deep: var(--c-grad);
   --c-grad-soft: linear-gradient(135deg, rgba(85, 99, 255, 0.12), rgba(168, 85, 247, 0.12));
 
   --c-cyan: #0891b2; /* 进行中 / streaming */
@@ -701,4 +706,197 @@ svg {
 .md-body .code-copy.copied {
   color: #6ee7a8;
   opacity: 1;
+}
+
+/* ============================================================
+   深色主题「冰川观测站」· 工作台作用域
+   ------------------------------------------------------------
+   为什么挂在 .page 上而不是改 :root：
+     登录 / 注册页（cover.css）复用 --c-ink / --c-text 等令牌，
+     若把 :root 翻成深色会连带破坏封面页。工作台根节点是 .page，
+     深色令牌挂在它上面 —— 令牌沿继承链下发，所有 var(--c-*) 的下游
+     （含各组件 <style scoped>）自动换肤；.page 之外（登录页、
+     全局 Toast、启动校验画面）保持原浅色不变。
+
+   换肤纪律（与登录页封面同一个方法论）：
+     1) 色相与语义**不动**，只按深底重算明度。同一色值不能在浅底与
+        深底上通用 —— 深底上必须整体提亮，否则对比度直接失守。
+     2) 语义色有「填充 / 文字」双重身份时**必须拆成两个令牌**：
+        --c-brand     仍是填充档（作底、白字压在上面）
+        --c-brand-text 是文字档（提亮后作文字）
+        混用一个令牌时，满足填充就失守文字，反之亦然。
+     3) 徽章/胶囊一律「深色内嵌底 + 语义色描边/文字」，
+        **不用半透明语义色填充** —— 半透明语义色会把局部底色抬亮，
+        反而吃掉同色系文字的对比度（实测会掉到 2.4:1）。
+   ============================================================ */
+.page {
+  /* ---------- 基底与层次 ---------- */
+  --c-bg: #0a0d16;
+  --c-bg-2: rgba(255, 255, 255, 0.07);
+  --c-surface: rgba(255, 255, 255, 0.08);
+  --c-surface-2: rgba(6, 10, 22, 0.42);
+  /* 玻璃面板 = 微光渐变层 + 深色填充层（两层，渐变在上） */
+  /* 微光层的高光幅度：设计稿用 0.2，但设计稿的画面里照片更暗。
+     本项目 cover.jpg 有大片亮雪，0.2 的高光叠加在亮雪上会把面板底
+     抬到 #8a8c95 量级，徽章/按键上的文字直接失守（实测 2.97:1）。
+     故把高光压到 0.1（仍保留玻璃质感），深色填充层保持 0.82。 */
+  --c-surface-glass: linear-gradient(
+      158deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.035) 58%,
+      rgba(255, 255, 255, 0.018)
+    ),
+    rgba(9, 14, 30, 0.88);
+
+  /* ---------- 发丝描边 ---------- */
+  --c-line: rgba(255, 255, 255, 0.14);
+  --c-line-strong: rgba(255, 255, 255, 0.3);
+
+  /* ---------- 文字（深底重算明度） ---------- */
+  --c-ink: #ffffff;
+  --c-text: rgba(255, 255, 255, 0.96);
+  --c-text-2: rgba(255, 255, 255, 0.88);
+  --c-text-3: rgba(255, 255, 255, 0.85);
+  /* 白胶囊（用户气泡）上的墨字档：浅色期的 --c-text 值，
+     深色主题里它不再是全局正文色，只在这一处用。 */
+  --c-ink-3: #1b2137;
+
+  /* 关键：换肤换的是令牌，但 color 属性是继承来的。
+     浅色期 body{color:var(--c-text)} 给全站定了字色，
+     深色期若不在这里重设，.page 内所有「没显式写 color」的元素
+     仍会继承 body 解析出的浅色 #1b2137 —— 在深底上直接失守。 */
+  color: var(--c-text);
+
+  /* ---------- 强调色：色相不动，只提亮到深底可用 ---------- */
+  --c-brand: #5563ff; /* 填充档：作底、白字压在上面 */
+  --c-brand-text: #adb4ff; /* 文字档：作文字/描边（新增） */
+  --c-brand-deep: #adb4ff; /* 既有「品牌文字」令牌，直接映射到文字档 */
+  /* 徽章内嵌底（--c-*-soft）：从 0.5 提到 0.88。
+     0.5 的半透明深色压不住玻璃面板的底，实测徽章底被抬到 #545977，
+     品牌文字档 #adb4ff 在上面只有 3.50:1。提到 0.88 后徽章底 ≈ #0b0e18，
+     同一档文字可到 9.8:1。 */
+  --c-brand-soft: rgba(4, 7, 16, 0.88);
+  --c-brand-line: rgba(173, 180, 255, 0.44);
+  --c-violet: #a78bfa;
+  /* 品牌渐变分两档：
+     --c-grad      作「填充块」（按钮/进度条），不承载白字，保持原色相；
+     --c-grad-deep 作「承载白字的实心块」（logo / 头像），整体压暗一档。
+     原 --c-grad 中段 #7c5cf6 上压白字只有 4.33:1，压暗后三段均 ≥ 6.7:1。 */
+  --c-grad: linear-gradient(135deg, #5563ff 0%, #7c5cf6 58%, #a855f7 100%);
+  --c-grad-deep: linear-gradient(135deg, #3a44d8 0%, #5533d6 58%, #7a2bd4 100%);
+  --c-grad-soft: linear-gradient(135deg, rgba(85, 99, 255, 0.2), rgba(168, 85, 247, 0.2));
+
+  --c-cyan: #22d3ee;
+  --c-cyan-soft: rgba(4, 7, 16, 0.88);
+  --c-grass: #34d399;
+  --c-grass-soft: rgba(4, 7, 16, 0.88);
+  --c-amber: #fbbf24;
+  --c-amber-soft: rgba(4, 7, 16, 0.88);
+  --c-rose: #f87171;
+  --c-rose-soft: rgba(4, 7, 16, 0.88);
+
+  --c-code-bg: rgba(6, 10, 22, 0.5);
+
+  /* ---------- 圆角 / 阴影 / 动效：与封面页对齐 ---------- */
+  --r-lg: 22px;
+  --sh-2: 0 14px 34px -22px rgba(2, 6, 20, 0.7);
+  --sh-3: 0 20px 52px -30px rgba(2, 6, 20, 0.68);
+  --sh-4: 0 26px 64px -26px rgba(2, 6, 20, 0.86);
+  --sh-brand: 0 10px 30px -14px rgba(85, 99, 255, 0.55);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 0.1s;
+  --dur-2: 0.3s;
+  --dur-3: 0.5s;
+
+  /* 工作台自己铺底：body 的背景属于 :root 令牌（浅色），不跟着换肤 */
+  background: var(--c-bg);
+}
+
+/* ---------- 原语在深底上的重算 ---------- */
+/* 玻璃：深色面板用 blur(22px)，比浅色期的 16px 更实，抵消透明度差异 */
+.page .glass {
+  backdrop-filter: blur(22px) saturate(128%);
+  box-shadow: 0 20px 52px -30px rgba(2, 6, 20, 0.68), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+/* 键盘提示键：浅色期是「白底黑字的小键帽」，深底上必须反过来用深色内嵌底，
+   否则半透明白叠在玻璃高光上会把它抬成浅灰（实测 2.97:1）。 */
+.page .kbd {
+  background: rgba(6, 10, 22, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+/* 胶囊：描边改成同色相半透明（原浅色描边 #bfe6ef 等会把深底点亮成白边） */
+.page .chip-cyan {
+  border-color: rgba(34, 211, 238, 0.44);
+}
+.page .chip-grass {
+  border-color: rgba(52, 211, 153, 0.44);
+}
+.page .chip-amber {
+  border-color: rgba(251, 191, 36, 0.44);
+}
+.page .chip-brand {
+  color: var(--c-brand-text);
+}
+/* 链接与焦点环：品牌填充档在深底上作文字偏暗，改用文字档 */
+.page a {
+  color: var(--c-brand-text);
+}
+.page :focus-visible {
+  outline-color: var(--c-brand-text);
+}
+.page .on-brand:focus-visible {
+  box-shadow: 0 0 0 4px rgba(85, 99, 255, 0.45);
+}
+.page ::selection {
+  background: rgba(85, 99, 255, 0.32);
+}
+/* 滚动条：浅色期是「深色拇指」，深底上必须反过来 */
+.page ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+}
+.page ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+/* 骨架屏：原来写死浅色高光 #fafbff */
+.page .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 25%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.06) 75%
+  );
+  background-size: 800px 100%;
+}
+/* 输入框聚焦：原来把底刷成纯白 */
+.page .field:focus {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 4px rgba(85, 99, 255, 0.24);
+}
+/* 幽灵按钮 hover 用浅色阴影，在深底上会「发灰」，改成描边点亮 */
+.page .btn-ghost:hover {
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+/* Markdown：pre 本来就是深色（#1a1f36），与深底主题天然一致，不动；
+   只有表格行 hover 的浅色底要换掉 */
+.page .md-body tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.05);
+}
+.page .md-body a {
+  border-bottom-color: rgba(173, 180, 255, 0.5);
+}
+/* 列表符号是「品牌色当文字」，同样要用文字档 */
+.page .md-body li::marker {
+  color: var(--c-brand-text);
+}
+/* 原生控件（日期选择、自动填充等）在深底上的默认配色 */
+.page input,
+.page textarea,
+.page select {
+  color: var(--c-text);
+  caret-color: var(--c-brand-text);
+}
+.page input::placeholder,
+.page textarea::placeholder {
+  color: var(--c-text-3);
 }

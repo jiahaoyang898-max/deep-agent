@@ -82,7 +82,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 20px;
-  background: var(--c-bg);
+  /* 登录页（cover.css 冰川观测站）与工作台现均为深色，闪屏统一用中性深底，
+     避免「深→浅→深」的跳色；此处在 .page 之外，令牌仍是浅色值，故硬编码。 */
+  background: #0a0d16;
 }
 .boot-logo {
   font-size: 38px;
@@ -96,7 +98,8 @@ onMounted(async () => {
   width: 132px;
   height: 3px;
   border-radius: var(--r-full);
-  background: var(--c-bg-2);
+  /* 深底上的轨道：原 --c-bg-2 在 .page 外是浅色 #eceef7，会变成一条亮条 */
+  background: rgba(255, 255, 255, 0.07);
   overflow: hidden;
 }
 .boot-bar span {
